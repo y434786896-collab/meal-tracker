@@ -8,6 +8,13 @@
       }
     },
     {
+      "path": "pages/random/random",
+      "style": {
+        "navigationBarTitleText": "吃什么",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
       "path": "pages/history/history",
       "style": {
         "navigationBarTitleText": "历史记录",
@@ -39,6 +46,12 @@
         "text": "今日",
         "iconPath": "static/tab-home.png",
         "selectedIconPath": "static/tab-home-active.png"
+      },
+      {
+        "pagePath": "pages/random/random",
+        "text": "吃什么",
+        "iconPath": "static/tab-random.png",
+        "selectedIconPath": "static/tab-random-active.png"
       },
       {
         "pagePath": "pages/history/history",

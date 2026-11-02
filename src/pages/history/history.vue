@@ -30,7 +30,10 @@
         <text class="page-history-detail-date">
           {{ selectedDates.length === 1 ? (friendlyDate(selectedDates[0]) + ' ' + getWeekDay(selectedDates[0])) : '已选 ' + selectedDates.length + ' 天' }}
         </text>
-        <text class="page-history-detail-count">{{ multiRecords.length }}条记录</text>
+        <view class="page-history-header-right">
+          <text class="page-history-detail-count">{{ multiRecords.length }}条记录</text>
+          <view class="page-history-add-btn" v-if="!multiMode" @tap="onAdd"><text>＋补记</text></view>
+        </view>
       </view>
 
       <view v-for="date in selectedDates" :key="date">
@@ -79,6 +82,8 @@
     <meal-input
       :visible="showEdit"
       :edit-record="editingRecord"
+      :date="editingRecord ? '' : (selectedDates[0] || '')"
+      @submit="onSubmitAdd"
       @update="onUpdate"
       @close="showEdit = false"
     />
@@ -88,7 +93,7 @@
 <script>
 import Calendar from '../../components/Calendar.vue'
 import MealInput from '../../components/MealInput.vue'
-import { getRecords, deleteRecord, updateRecord } from '../../utils/storage'
+import { getRecords, deleteRecord, updateRecord, addRecord, generateId } from '../../utils/storage'
 import { getToday, getWeekDay, getFriendlyDate } from '../../utils/date'
 
 export default {
@@ -156,6 +161,31 @@ export default {
       this.editingRecord = record
       this.showEdit = true
     },
+    /** 补记：以选中日期新增一条记录 */
+    onAdd() {
+      const date = this.selectedDates[0]
+      if (!date || date > getToday()) {
+        uni.showToast({ title: '未来日期不能补记', icon: 'none' })
+        return
+      }
+      this.editingRecord = null
+      this.showEdit = true
+    },
+    async onSubmitAdd(payload) {
+      const date = this.selectedDates[0]
+      if (!date || date > getToday()) return
+      await addRecord({
+        id: generateId(),
+        date,
+        mealType: payload.mealType,
+        dishes: payload.dishes,
+        note: payload.note || '',
+        images: payload.images || [],
+        createdAt: Date.now()
+      })
+      this.showEdit = false
+      await this.loadData()
+    },
     async onUpdate(payload) {
       const { id, mealType, dishes, note, images } = payload
       await updateRecord(id, { mealType, dishes, note, images })
@@ -222,6 +252,11 @@ export default {
   box-shadow: 0 2rpx 12rpx rgba(0,0,0,0.05);
 }
 .page-history-detail-header { padding-bottom: 20rpx; border-bottom: 1rpx solid #f0f0f0; }
+.page-history-header-right { display: flex; align-items: center; }
+.page-history-add-btn {
+  background: #4CAF50; color: #fff; font-size: 24rpx;
+  padding: 8rpx 24rpx; border-radius: 24rpx; margin-left: 16rpx;
+}
 .page-history-detail-date { font-size: 30rpx; font-weight: 600; color: #333; }
 .page-history-detail-count { font-size: 24rpx; color: #999; }
 

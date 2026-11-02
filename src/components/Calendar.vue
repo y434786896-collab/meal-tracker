@@ -9,15 +9,16 @@
       <text class="calendar-weekday" v-for="w in weekdays" :key="w">{{ w }}</text>
     </view>
     <view class="calendar-days">
-      <view class="calendar-day calendar-day-empty" v-for="n in firstDay" :key="'e-' + n" />
+      <view class="calendar-day calendar-day-empty" v-for="n in emptyList" :key="n" />
       <view
         class="calendar-day"
         :class="{
           'calendar-day-today': isToday(day),
           'calendar-day-selected': isSelected(day),
-          'calendar-day-has-record': hasRecord(day)
+          'calendar-day-has-record': hasRecord(day),
+          'calendar-day-disabled': isFuture(day)
         }"
-        v-for="day in daysInMonth"
+        v-for="day in dayList"
         :key="day"
         @tap="selectDay(day)"
       >
@@ -49,16 +50,29 @@ export default {
   },
   computed: {
     daysInMonth() { return getMonthDays(this.year, this.month) },
-    firstDay() { return getMonthFirstDay(this.year, this.month) }
+    firstDay() { return getMonthFirstDay(this.year, this.month) },
+    dayList() {
+      const list = []
+      for (let i = 1; i <= this.daysInMonth; i++) list.push(i)
+      return list
+    },
+    emptyList() {
+      const list = []
+      for (let i = 0; i < this.firstDay; i++) list.push('empty' + i)
+      return list
+    }
   },
   methods: {
     isToday(day) { return this.getDateStr(day) === getToday() },
+    // 未来日期不可选（YYYY-MM-DD 字符串可直接按字典序比较）
+    isFuture(day) { return this.getDateStr(day) > getToday() },
     isSelected(day) { return this.selectedDates.includes(this.getDateStr(day)) },
     hasRecord(day) { return this.recordDates.includes(this.getDateStr(day)) },
     getDateStr(day) {
       return `${this.year}-${String(this.month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
     },
     selectDay(day) {
+      if (this.isFuture(day)) return // 未来日期不能选
       const dateStr = this.getDateStr(day)
       if (this.multi) {
         // 多选模式：toggle
@@ -108,6 +122,7 @@ export default {
 }
 .calendar-day-empty { height: 72rpx; }
 .calendar-day-today .calendar-day-text { color: #4CAF50; font-weight: 600; }
+.calendar-day-disabled .calendar-day-text { color: #ddd; }
 .calendar-day-selected .calendar-day-text {
   background: #4CAF50; color: #fff; border-radius: 50%;
 }

@@ -1,6 +1,9 @@
 <template>
   <view class="meal-input-mask" v-if="visible" @tap="close">
     <view class="meal-input" @tap.stop>
+      <view class="meal-input-section" v-if="!isEdit && date">
+        <text class="meal-input-date-hint">📅 补记：{{ date }}</text>
+      </view>
       <view class="meal-input-section">
         <text class="meal-input-label">选择餐次</text>
         <view class="meal-input-types">
@@ -76,7 +79,8 @@ export default {
   name: 'MealInput',
   props: {
     visible: { type: Boolean, default: false },
-    editRecord: { type: Object, default: null }
+    editRecord: { type: Object, default: null },
+    date: { type: String, default: '' }
   },
   data() {
     return {
@@ -138,15 +142,33 @@ export default {
       this.loadFrequent()
     },
     chooseImage() {
+      const remain = 3 - this.form.images.length
+      if (remain <= 0) return
+
+      const addPaths = (paths) => { paths.forEach(p => this.form.images.push(p)) }
+      const onFail = (err) => {
+        const msg = (err && err.errMsg) || ''
+        if (msg.indexOf('cancel') !== -1) return // 用户取消不算错误
+        console.error('选择图片失败', err)
+        uni.showToast({ title: '选择图片失败，请重试', icon: 'none' })
+      }
+      if (wx.canIUse('chooseMedia')) {
+        wx.chooseMedia({
+          count: remain,
+          mediaType: ['image'],
+          sizeType: ['compressed'],
+          sourceType: ['album', 'camera'],
+          success: (res) => addPaths(res.tempFiles.map(f => f.tempFilePath)),
+          fail: onFail
+        })
+        return
+      }
       uni.chooseImage({
-        count: 3 - this.form.images.length,
+        count: remain,
         sizeType: ['compressed'],
         sourceType: ['album', 'camera'],
-        success: (res) => {
-          res.tempFilePaths.forEach(path => {
-            this.form.images.push(path)
-          })
-        }
+        success: (res) => addPaths(res.tempFilePaths),
+        fail: onFail
       })
     },
     removeImage(idx) {
@@ -165,7 +187,6 @@ export default {
       const imageFileIDs = []
       for (let i = 0; i < this.form.images.length; i++) {
         const filePath = this.form.images[i]
-        // 如果已经是 fileID（以 cloud:// 开头），直接使用
         if (filePath.startsWith('cloud://')) {
           imageFileIDs.push(filePath)
         } else {
@@ -206,6 +227,10 @@ export default {
   max-height: 80vh; overflow-y: auto;
 }
 .meal-input-section { margin-bottom: 30rpx; }
+.meal-input-date-hint {
+  display: inline-block; font-size: 26rpx; color: #4CAF50;
+  background: #f0f9f0; padding: 12rpx 20rpx; border-radius: 8rpx;
+}
 .meal-input-label { display: block; font-size: 28rpx; font-weight: 600; color: #333; margin-bottom: 16rpx; }
 .meal-input-types { display: flex; }
 .meal-input-type-btn {
