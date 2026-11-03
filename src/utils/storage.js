@@ -254,37 +254,70 @@ export async function deleteImage(fileID) {
   }
 }
 
-/** 获取图片临时访问链接（用于展示） */
-export async function getImageTempURL(fileID) {
-  if (!fileID) return ''
-  try {
-    const cloud = initCloud()
-    if (cloud) {
-      const { fileList } = await wx.cloud.getTempFileURL({ fileList: [fileID] })
-      return fileList[0] && fileList[0].tempFileURL || ''
-    }
-  } catch (e) {
-    console.error('获取图片链接失败', e)
-  }
-  return ''
-}
+// ==================== 图片临时链接缓存 ====================
+// <image> 直接渲染 cloud:// fileID 时客户端每次都要重新解析+下载，
+// 这里缓存 fileID → https 临时链接，https 链接能吃到微信的图片磁盘缓存
+const tempURLCache = new Map()
+// 临时链接官方有效期 2 小时，提前 20 分钟视为过期，避免边界裂图
+const TEMP_URL_TTL = 100 * 60 * 1000
 
-/** 批量获取图片临时链接 */
-export async function getImageTempURLs(fileIDs) {
+/**
+ * 批量把 cloud:// fileID 解析成 https 临时链接（仅用于显示，勿写回记录/提交）
+ * - 命中会话缓存直接返回；非 cloud:// 路径（本地临时文件等）原样返回
+ * - 解析失败的条目兜底返回原 fileID（<image> 仍能渲染 cloud://，只是慢）
+ * @param {string[]} fileIDs
+ * @returns {Promise<string[]>} 与入参等长、顺序一致的显示用 URL
+ */
+export async function resolveImageURLs(fileIDs) {
   if (!fileIDs || fileIDs.length === 0) return []
-  try {
-    const cloud = initCloud()
-    if (cloud) {
-      const { fileList } = await wx.cloud.getTempFileURL({ fileList: fileIDs })
-      return fileList.map(f => f.tempFileURL || '')
+  const now = Date.now()
+  const result = fileIDs.slice()
+  const needFetch = []
+  fileIDs.forEach((id, i) => {
+    if (!id || !id.startsWith('cloud://')) return
+    const cached = tempURLCache.get(id)
+    if (cached && now - cached.time < TEMP_URL_TTL) {
+      result[i] = cached.url
+    } else {
+      needFetch.push({ id, i })
     }
-  } catch (e) {
-    console.error('批量获取图片链接失败', e)
+  })
+  if (needFetch.length > 0 && initCloud()) {
+    try {
+      // getTempFileURL 单次上限 50 个，分批请求
+      for (let s = 0; s < needFetch.length; s += 50) {
+        const batch = needFetch.slice(s, s + 50)
+        const { fileList } = await wx.cloud.getTempFileURL({ fileList: batch.map(b => b.id) })
+        fileList.forEach(f => {
+          if (f.tempFileURL) tempURLCache.set(f.fileID, { url: f.tempFileURL, time: now })
+        })
+      }
+    } catch (e) {
+      console.error('解析图片临时链接失败', e)
+    }
+    needFetch.forEach(({ id, i }) => {
+      const cached = tempURLCache.get(id)
+      if (cached) result[i] = cached.url
+    })
   }
-  return []
+  return result
 }
 
 /** 生成唯一 ID */
 export function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).substr(2, 5)
+}
+
+/**
+ * 计算「合并到已有记录」后的字段：
+ * 菜品去重追加、图片追加（上限3张）、备注用「；」拼接
+ */
+export function mergeRecordData(existing, payload) {
+  const dishes = [...(existing.dishes || [])]
+  ;(payload.dishes || []).forEach(d => {
+    if (!dishes.includes(d)) dishes.push(d)
+  })
+  const images = [...(existing.images || []), ...(payload.images || [])].slice(0, 3)
+  const note = [existing.note, payload.note].filter(s => s && s.trim()).join('；')
+  return { dishes, images, note }
 }

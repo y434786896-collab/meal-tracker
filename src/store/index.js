@@ -1,6 +1,6 @@
 import Vue from 'vue'
 import Vuex from 'vuex'
-import { getRecords, addRecord, updateRecord, deleteRecord, getFrequentDishes, removeFrequentDish, generateId } from '../utils/storage'
+import { getRecords, addRecord, updateRecord, deleteRecord, getFrequentDishes, removeFrequentDish, generateId, mergeRecordData } from '../utils/storage'
 import { getToday } from '../utils/date'
 
 Vue.use(Vuex)
@@ -63,11 +63,18 @@ export default new Vuex.Store({
       commit('SET_LOADING', false)
     },
 
-    /** 添加饮食记录 */
-    async addMeal({ commit, dispatch }, { mealType, dishes, note, images }) {
+    /** 添加饮食记录（同一天同一餐次已有时，合并到已有记录） */
+    async addMeal({ commit, dispatch, state }, { mealType, dishes, note, images }) {
+      const today = getToday()
+      const existing = state.records.find(r => r.date === today && r.mealType === mealType)
+      if (existing) {
+        await updateRecord(existing.id, mergeRecordData(existing, { dishes, note, images }))
+        await dispatch('loadRecords')
+        return existing
+      }
       const record = {
         id: generateId(),
-        date: getToday(),
+        date: today,
         mealType,
         dishes,
         note: note || '',

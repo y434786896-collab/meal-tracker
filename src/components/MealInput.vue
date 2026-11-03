@@ -1,6 +1,6 @@
 <template>
-  <view class="meal-input-mask" v-if="visible" @tap="close">
-    <view class="meal-input" @tap.stop>
+  <view class="meal-input-mask" v-if="visible" @tap="close" @touchmove.stop.prevent="noop">
+    <scroll-view class="meal-input" scroll-y @tap.stop>
       <view class="meal-input-section" v-if="!isEdit && date">
         <text class="meal-input-date-hint">📅 补记：{{ date }}</text>
       </view>
@@ -68,12 +68,12 @@
         <view class="meal-input-cancel" @tap="close"><text>取消</text></view>
         <view class="meal-input-submit" :class="{ 'meal-input-submit-disabled': !canSubmit }" @tap="submit"><text>{{ isEdit ? '保存修改' : '保存' }}</text></view>
       </view>
-    </view>
+    </scroll-view>
   </view>
 </template>
 
 <script>
-import { getFrequentDishes, removeFrequentDish, uploadImage } from '../utils/storage'
+import { getFrequentDishes, removeFrequentDish, uploadImage, resolveImageURLs } from '../utils/storage'
 
 export default {
   name: 'MealInput',
@@ -106,16 +106,24 @@ export default {
     }
   },
   methods: {
+    noop() {}, // 空函数：仅用于拦截遮罩层 touchmove，防止背景滚动穿透
     initForm() {
       if (this.editRecord) {
-        // 编辑模式：预填数据
+        // 编辑模式：预填数据。
+        // imageFileIDs 是提交用原值（cloud:// fileID）；images 是显示用 URL。
+        // 先原样渲染 fileID，异步换成 https 临时链接（缓存命中时近乎即时）
+        const fileIDs = [...(this.editRecord.images || [])]
         this.form = {
           mealType: this.editRecord.mealType,
           dishes: [...this.editRecord.dishes],
           note: this.editRecord.note || '',
-          images: [...(this.editRecord.images || [])],
-          imageFileIDs: [...(this.editRecord.images || [])]
+          images: [...fileIDs],
+          imageFileIDs: fileIDs
         }
+        resolveImageURLs(fileIDs).then(urls => {
+          // 异步返回时弹窗可能已关闭或切到别的记录，校验数组身份再赋值
+          if (this.form.imageFileIDs === fileIDs) this.form.images = urls
+        })
       } else {
         this.resetForm()
       }
@@ -145,7 +153,10 @@ export default {
       const remain = 3 - this.form.images.length
       if (remain <= 0) return
 
-      const addPaths = (paths) => { paths.forEach(p => this.form.images.push(p)) }
+      const addPaths = (paths) => {
+        // 两个数组保持下标对齐：images 用于显示，imageFileIDs 用于提交
+        paths.forEach(p => { this.form.images.push(p); this.form.imageFileIDs.push(p) })
+      }
       const onFail = (err) => {
         const msg = (err && err.errMsg) || ''
         if (msg.indexOf('cancel') !== -1) return // 用户取消不算错误
@@ -183,10 +194,12 @@ export default {
     },
     async submit() {
       if (!this.canSubmit) return
-      // 上传图片到云存储
+      // 上传图片到云存储。遍历 imageFileIDs（提交用原值）：
+      // cloud:// 开头 = 已上传的旧图，保留 fileID；其余 = 待上传的本地临时文件。
+      // 不能遍历 form.images，里面可能是解析后的 https 临时链接，会被误判成新图导致丢失
       const imageFileIDs = []
-      for (let i = 0; i < this.form.images.length; i++) {
-        const filePath = this.form.images[i]
+      for (let i = 0; i < this.form.imageFileIDs.length; i++) {
+        const filePath = this.form.imageFileIDs[i]
         if (filePath.startsWith('cloud://')) {
           imageFileIDs.push(filePath)
         } else {
@@ -224,7 +237,7 @@ export default {
 .meal-input {
   width: 100%; background: #fff; border-radius: 24rpx 24rpx 0 0;
   padding: 30rpx; padding-bottom: calc(30rpx + env(safe-area-inset-bottom));
-  max-height: 80vh; overflow-y: auto;
+  max-height: 80vh; box-sizing: border-box;
 }
 .meal-input-section { margin-bottom: 30rpx; }
 .meal-input-date-hint {

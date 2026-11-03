@@ -32,7 +32,7 @@
         </text>
         <view class="page-history-header-right">
           <text class="page-history-detail-count">{{ multiRecords.length }}条记录</text>
-          <view class="page-history-add-btn" v-if="!multiMode" @tap="onAdd"><text>＋补记</text></view>
+          <view class="page-history-add-btn" v-if="canAddRecord" @tap="onAdd"><text>＋补记</text></view>
         </view>
       </view>
 
@@ -44,12 +44,11 @@
         </view>
 
         <view class="page-history-records" v-if="dateRecords(date).length > 0">
-          <view class="page-history-record" v-for="record in dateRecords(date)" :key="record.id">
+          <view class="page-history-record" v-for="record in dateRecords(date)" :key="record.id" @tap="onEdit(record)">
             <view class="page-history-record-header flex-between">
               <text class="page-history-record-type">{{ labelMap[record.mealType] }}</text>
               <view class="page-history-record-actions">
-                <text class="page-history-edit" @tap="onEdit(record)">编辑</text>
-                <text class="page-history-delete" @tap="onDelete(record.id)">删除</text>
+                <text class="page-history-delete" @tap.stop="onDelete(record.id)">删除</text>
               </view>
             </view>
             <view class="page-history-record-dishes">
@@ -62,7 +61,7 @@
                 :key="idx"
                 :src="img"
                 mode="aspectFill"
-                @tap="previewImage(record.images, idx)"
+                @tap.stop="previewImage(record.images, idx)"
               />
             </view>
             <text class="page-history-record-note" v-if="record.note">{{ record.note }}</text>
@@ -93,7 +92,7 @@
 <script>
 import Calendar from '../../components/Calendar.vue'
 import MealInput from '../../components/MealInput.vue'
-import { getRecords, deleteRecord, updateRecord, addRecord, generateId } from '../../utils/storage'
+import { getRecords, deleteRecord, updateRecord, addRecord, generateId, mergeRecordData } from '../../utils/storage'
 import { getToday, getWeekDay, getFriendlyDate } from '../../utils/date'
 
 export default {
@@ -113,6 +112,10 @@ export default {
   computed: {
     multiRecords() {
       return this.allRecords.filter(r => this.selectedDates.includes(r.date))
+    },
+    // 补记只对过去的日期开放；今天的记录去首页记（字符串比较对 YYYY-MM-DD 有效）
+    canAddRecord() {
+      return !this.multiMode && this.selectedDates.length === 1 && this.selectedDates[0] < getToday()
     }
   },
   onShow() { this.loadData() },
@@ -174,15 +177,20 @@ export default {
     async onSubmitAdd(payload) {
       const date = this.selectedDates[0]
       if (!date || date > getToday()) return
-      await addRecord({
-        id: generateId(),
-        date,
-        mealType: payload.mealType,
-        dishes: payload.dishes,
-        note: payload.note || '',
-        images: payload.images || [],
-        createdAt: Date.now()
-      })
+      const existing = this.allRecords.find(r => r.date === date && r.mealType === payload.mealType)
+      if (existing) {
+        await updateRecord(existing.id, mergeRecordData(existing, payload))
+      } else {
+        await addRecord({
+          id: generateId(),
+          date,
+          mealType: payload.mealType,
+          dishes: payload.dishes,
+          note: payload.note || '',
+          images: payload.images || [],
+          createdAt: Date.now()
+        })
+      }
       this.showEdit = false
       await this.loadData()
     },
@@ -274,7 +282,6 @@ export default {
 .page-history-record-header { margin-bottom: 8rpx; }
 .page-history-record-type { font-size: 28rpx; font-weight: 600; color: #333; }
 .page-history-record-actions { display: flex; }
-.page-history-edit { font-size: 24rpx; color: #4CAF50; padding: 4rpx 12rpx; margin-right: 12rpx; }
 .page-history-delete { font-size: 24rpx; color: #dd524d; padding: 4rpx 12rpx; }
 .page-history-record-dishes { display: flex; flex-wrap: wrap; }
 .page-history-dish {

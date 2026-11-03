@@ -9,7 +9,7 @@
     </view>
 
     <view class="meal-card-body" v-if="list.length > 0">
-      <view class="meal-card-item" v-for="record in list" :key="record.id">
+      <view class="meal-card-item" v-for="record in list" :key="record.id" @tap="onEdit(record)">
         <view class="meal-card-dishes">
           <text class="meal-card-dish" v-for="(dish, idx) in record.dishes" :key="idx">{{ dish }}</text>
         </view>
@@ -20,13 +20,12 @@
             :key="idx"
             :src="img"
             mode="aspectFill"
-            @tap="previewImage(record.images, idx)"
+            @tap.stop="previewImage(record.images, idx)"
           />
         </view>
         <text class="meal-card-note" v-if="record.note">{{ record.note }}</text>
         <view class="meal-card-actions">
-          <text class="meal-card-edit" @tap="onEdit(record)">编辑</text>
-          <text class="meal-card-delete" @tap="onDelete(record.id)">删除</text>
+          <text class="meal-card-delete" @tap.stop="onDelete(record.id)">删除</text>
         </view>
       </view>
     </view>
@@ -111,7 +110,6 @@ export default {
   width: 120rpx; height: 120rpx; border-radius: 8rpx; margin-right: 12rpx; margin-bottom: 8rpx;
 }
 .meal-card-actions { display: flex; justify-content: flex-end; margin-top: 8rpx; }
-.meal-card-edit { font-size: 24rpx; color: #4CAF50; padding: 4rpx 12rpx; margin-right: 16rpx; }
 .meal-card-delete { font-size: 24rpx; color: #dd524d; padding: 4rpx 12rpx; }
 .meal-card-empty { padding: 40rpx 30rpx; text-align: center; }
 .meal-card-empty-text { font-size: 26rpx; color: #ccc; }
